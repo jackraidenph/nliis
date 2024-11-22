@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: nliis
+    ui:
+      title: Natural Language Interface of Intellectual Systems
+
+logging:
+  level:
+    root: WARN
