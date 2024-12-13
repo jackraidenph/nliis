@@ -3,19 +3,16 @@ package dev.jackraidenph.nliis.frontend.view;
 import com.sun.speech.freetts.Voice;
 import com.sun.speech.freetts.VoiceManager;
 import com.sun.speech.freetts.audio.SingleFileAudioPlayer;
-import dev.jackraidenph.nliis.backend.data.document.Document;
 import dev.jackraidenph.nliis.backend.utility.StringUtilities;
 import dev.jackraidenph.nliis.frontend.utility.JavaFXCommonComponents;
 import dev.jackraidenph.nliis.frontend.utility.JavaFXUtilities;
-import edu.cmu.sphinx.api.SpeechResult;
-import edu.cmu.sphinx.api.StreamSpeechRecognizer;
-import edu.cmu.sphinx.decoder.adaptation.Stats;
-import edu.cmu.sphinx.decoder.adaptation.Transform;
-import edu.cmu.sphinx.result.WordResult;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
@@ -24,15 +21,17 @@ import javafx.stage.Stage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
+import org.vosk.LibVosk;
+import org.vosk.LogLevel;
+import org.vosk.Model;
+import org.vosk.Recognizer;
 
 import javax.sound.sampled.AudioFileFormat.Type;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioFormat.Encoding;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.speech.synthesis.Synthesizer;
 import java.io.*;
-import java.nio.file.Path;
 import java.util.List;
-import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RequiredArgsConstructor
@@ -43,7 +42,6 @@ public class SpeechView implements View {
     private final Stage primaryStage;
     private final Synthesizer synthesizer;
     private final Voice voice = VoiceManager.getInstance().getVoice("kevin");
-    private final StreamSpeechRecognizer streamSpeechRecognizer;
     private final ChatModel chatModel;
 
     private Region rootRegion;
@@ -76,71 +74,90 @@ public class SpeechView implements View {
         recognized.setWrapText(true);
         recognized.setEditable(false);
 
+        Label rateLabel = new Label("Speech Rate: ");
+        TextField rateField = JavaFXCommonComponents.createGenericTextField("Speech Rate");
+        rateField.setText("150");
+        Label pitchLabel = new Label("Speech Pitch: ");
+        TextField pitchField = JavaFXCommonComponents.createGenericTextField("Speech Pitch");
+        pitchField.setText("100");
+        Label volumeLabel = new Label("Speech Volume: ");
+        TextField volumeField = JavaFXCommonComponents.createGenericTextField("Speech Volume");
+        volumeField.setText("8");
+
+        HBox rate = new HBox(rateLabel, rateField);
+        HBox pitch = new HBox(pitchLabel, pitchField);
+        HBox volume = new HBox(volumeLabel, volumeField);
+        VBox settings = new VBox(rate, pitch, volume);
+        settings.setSpacing(5);
+        settings.setPadding(new Insets(5));
+
         Button recognizeButton = JavaFXCommonComponents.createGenericButton("Recognize", actionEvent -> {
 
             if (file.get() == null) {
                 return;
             }
 
-            Stats stats = streamSpeechRecognizer.createStats(1);
-            SpeechResult result;
-            try (InputStream stream = new FileInputStream(file.get())) {
-                streamSpeechRecognizer.startRecognition(stream);
-                while ((result = streamSpeechRecognizer.getResult()) != null) {
-                    stats.collect(result);
-                }
-                streamSpeechRecognizer.stopRecognition();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            Platform.runLater(() -> {
+                String text = this.recognizeFile(file.get().getAbsolutePath());
 
-            StringJoiner joiner = new StringJoiner("\n");
+                recognized.setText(text);
 
-            try (InputStream stream = new FileInputStream(file.get())) {
-                // Transform represents the speech profile
-                Transform transform = stats.createTransform();
-                streamSpeechRecognizer.setTransform(transform);
+                answerField.setText(chatModel.call(text));
 
-                // Decode again with updated transform
-                stream.skip(44);
-                streamSpeechRecognizer.startRecognition(stream);
-                while ((result = streamSpeechRecognizer.getResult()) != null) {
-                    joiner.add(result.getHypothesis());
-                }
-                streamSpeechRecognizer.stopRecognition();
-                recognized.setText(joiner.toString());
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+                int rateInt = Integer.parseInt(rateField.getText());
+                int pitchInt = Integer.parseInt(pitchField.getText());
+                int volumeInt = Integer.parseInt(volumeField.getText());
 
-            String text = joiner.toString();
-
-            recognized.setText(text);
-
-            answerField.setText(chatModel.call(text));
-
-            this.speak(answerField.getText(), false);
+                this.speak(answerField.getText(), false, rateInt, pitchInt, volumeInt);
+            });
         });
 
         TextField textField = new TextField();
         textField.setPromptText("Enter text to pronounce...");
-        Button button = JavaFXCommonComponents.createGenericButton("Speak", actionEvent -> this.speak(textField.getText(), true));
+        Button button = JavaFXCommonComponents.createGenericButton("Speak", actionEvent -> {
+            int rateInt = Integer.parseInt(rateField.getText());
+            int pitchInt = Integer.parseInt(pitchField.getText());
+            int volumeInt = Integer.parseInt(volumeField.getText());
+            this.speak(textField.getText(), true, rateInt, pitchInt, volumeInt);
+        });
 
 
         Node[] column = {mediaView, openDocumentsButton, recognizeButton, recognized, answerField, textField, button};
-        Node[][] layout = {column};
+        Node[] column1 = {settings};
+        Node[][] layout = {column, column1};
 
         return JavaFXCommonComponents.createGenericColumnarLayout(layout, 10, 10);
     }
 
-    private void speak(String text, boolean save) {
+    private String recognizeFile(String file) {
+        LibVosk.setLogLevel(LogLevel.DEBUG);
+
+        try (Model model = new Model("recognizer/vosk-model-en-us-0.42-gigaspeech");
+             InputStream ais = AudioSystem.getAudioInputStream(new BufferedInputStream(new FileInputStream(file)));
+             Recognizer recognizer = new Recognizer(model, 8000)) {
+
+            int nbytes;
+            byte[] b = new byte[4096];
+            while ((nbytes = ais.read(b)) >= 0) {
+                recognizer.acceptWaveForm(b, nbytes);
+            }
+
+            String result = recognizer.getFinalResult();
+
+            return result.substring(14, result.length() - 3).trim();
+        } catch (IOException | UnsupportedAudioFileException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void speak(String text, boolean save, int rate, int pitch, int volume) {
         Platform.runLater(() -> {
             try {
                 if (this.voice != null) {
 
-                    this.voice.setRate(150);
-                    this.voice.setPitch(155);
-                    this.voice.setVolume(8);
+                    this.voice.setRate(rate);
+                    this.voice.setPitch(pitch);
+                    this.voice.setVolume(volume);
                     if (save) {
                         SingleFileAudioPlayer player = new SingleFileAudioPlayer(
                                 "tts/" + StringUtilities.sanitize(text).replaceAll(StringUtilities.ONE_OR_MORE_SPACES, "_"),

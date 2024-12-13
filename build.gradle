@@ -66,8 +66,12 @@ dependencies {
     implementation 'org.apache.opennlp:opennlp-uima:2.5.0'
     implementation 'org.apache.opennlp:opennlp-tools:2.5.0'
 
-    implementation group: 'edu.cmu.sphinx', name: 'sphinx4-core', version:'5prealpha-SNAPSHOT'
-    implementation group: 'edu.cmu.sphinx', name: 'sphinx4-data', version:'5prealpha-SNAPSHOT'
+    implementation 'net.java.dev.jna:jna:5.7.0'
+    implementation 'com.alphacephei:vosk:0.3.45'
+
+// https://mvnrepository.com/artifact/marytts/marytts-client
+    //implementation 'marytts:marytts-client:5.0'
+
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

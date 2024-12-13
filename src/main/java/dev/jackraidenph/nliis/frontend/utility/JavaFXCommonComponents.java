@@ -9,6 +9,7 @@ import javafx.scene.control.*;
 import javafx.scene.control.TableView.ResizeFeatures;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
+import javafx.scene.text.Text;
 import javafx.util.Callback;
 
 import java.util.*;
@@ -102,6 +103,7 @@ public class JavaFXCommonComponents {
             column.setSortable(sortable);
             column.setResizable(resizable);
             column.setText(columnFactory.getKey());
+
             column.setCellValueFactory(p -> {
                 T pValue = p.getValue();
                 if (pValue == null) {
@@ -112,6 +114,22 @@ public class JavaFXCommonComponents {
                 return new SimpleStringProperty(
                         (mappedValue == null || mappedValue.isBlank()) ? emptyPlaceholder : mappedValue
                 );
+            });
+//
+            column.setCellFactory(param -> new TableCell<>() {
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+
+                    if (item == null || empty) {
+                        setText(emptyPlaceholder);
+                        setStyle("");
+                    } else {
+                        Text text = new Text(item);
+                        text.wrappingWidthProperty().bind(getTableColumn().widthProperty().subtract(35));
+                        setGraphic(text);
+                    }
+                }
             });
 
             tableView.getColumns().add(column);

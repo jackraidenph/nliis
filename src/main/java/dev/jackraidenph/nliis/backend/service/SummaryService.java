@@ -7,6 +7,10 @@ import dev.jackraidenph.nliis.backend.repository.DocumentRepository;
 import dev.jackraidenph.nliis.backend.repository.DocumentStatisticsRepository;
 import dev.jackraidenph.nliis.backend.service.SentenceDetectorService.Sentence;
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.ChatOptionsBuilder;
+import org.springframework.ai.chat.prompt.Prompt;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,6 +21,7 @@ public class SummaryService {
 
     private final DocumentStatisticsService documentStatisticsService;
     private final SentenceDetectorService sentenceDetector;
+    private final ChatModel chatModel;
     private int maxEntries = 10;
     private int minWordLength = 6;
     private int minSentenceLength = minWordLength * 12;
@@ -57,10 +62,20 @@ public class SummaryService {
                 ).keySet()
         );
 
-        return new Summary(topKWords, topKSentences);
+        String ml = this.chatModel.call(
+                        new Prompt(
+                                "Give me a small summary of the given text: %s".formatted(document.getContent()),
+                                ChatOptionsBuilder.builder().withMaxTokens(1000).build()
+                        )
+                )
+                .getResult()
+                .getOutput()
+                .getContent();
+
+        return new Summary(topKWords, topKSentences, ml);
     }
 
-    public record Summary(List<String> keywords, List<String> sentences) {
+    public record Summary(List<String> keywords, List<String> sentences, String mlSummary) {
 
     }
 

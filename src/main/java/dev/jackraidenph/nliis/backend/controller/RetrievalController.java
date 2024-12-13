@@ -10,6 +10,8 @@ import dev.jackraidenph.nliis.backend.service.retrieval.BM25RetrievalService;
 import dev.jackraidenph.nliis.backend.service.retrieval.RetrievalService;
 import dev.jackraidenph.nliis.backend.service.retrieval.RetrievalService.DocumentScore;
 import dev.jackraidenph.nliis.backend.utility.StringUtilities;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -21,11 +23,13 @@ public class RetrievalController {
     private final DocumentRepository documentRepository;
     private final DocumentStatisticsService documentStatisticsService;
     private final DocumentStatisticsRepository documentStatisticsRepository;
+    private final ChatModel chatModel;
 
     public RetrievalController(
             DocumentRepository documentRepository,
             DocumentStatisticsService documentStatisticsService,
-            DocumentStatisticsRepository documentStatisticsRepository
+            DocumentStatisticsRepository documentStatisticsRepository,
+            ChatModel chatModel
     ) {
         this.bm25RetrievalService = new BM25RetrievalService(
                 documentRepository,
@@ -35,6 +39,7 @@ public class RetrievalController {
         this.documentRepository = documentRepository;
         this.documentStatisticsService = documentStatisticsService;
         this.documentStatisticsRepository = documentStatisticsRepository;
+        this.chatModel = chatModel;
     }
 
     public List<DocumentScore> retrieveDocuments(String query) {
@@ -46,6 +51,7 @@ public class RetrievalController {
 
         return this.bm25RetrievalService.retrieve(sanitized)
                 .stream()
+                .filter(d -> d.score() > 0d)
                 .sorted(Comparator.reverseOrder())
                 .toList();
     }

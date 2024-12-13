@@ -13,9 +13,12 @@ import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,7 @@ public class RetrievalView implements View {
     private final Stage primaryStage;
     private final FileChooser textDocumentFileChooser;
     private final RetrievalController controller;
+    private final ChatModel chatModel;
 
     private Region rootRegion;
 
@@ -39,15 +43,21 @@ public class RetrievalView implements View {
         return this.rootRegion;
     }
 
+    private String getRelevancyJustification(String query, String text) {
+        Prompt prompt = new Prompt("Answer if the text is relevant to the query or not. The query searches for specific words. Exactly one simple sentence. Query: %s. Text: %s".formatted(query, text));
+        return this.chatModel.call(prompt).getResult().getOutput().getContent();
+    }
+
     private Region build() {
 
         TextField queryField = JavaFXCommonComponents.createGenericTextField("Enter query...");
 
-        Map<String, Function<DocumentScore, String>> columnFactories = new LinkedHashMap<>();
-        columnFactories.put("Title", ds -> ds.document().getTitle());
-        columnFactories.put("Path", ds -> ds.document().getPathToFile().toString());
-        columnFactories.put("Search Score", ds -> "%.3f".formatted(ds.score()));
-        TableView<DocumentScore> resultsTable = JavaFXCommonComponents.createGenericStringTableView(
+        Map<String, Function<DocumentRow, String>> columnFactories = new LinkedHashMap<>();
+        columnFactories.put("Title", ds -> ds.documentScore().document().getTitle());
+        columnFactories.put("Path", ds -> ds.documentScore().document().getPathToFile().toString());
+        columnFactories.put("Search Score", ds -> "%.3f".formatted(ds.documentScore().score()));
+        columnFactories.put("Justification", DocumentRow::justification);
+        TableView<DocumentRow> resultsTable = JavaFXCommonComponents.createGenericStringTableView(
                 columnFactories,
                 false,
                 false,
@@ -55,14 +65,18 @@ public class RetrievalView implements View {
                 (tableRow, mouseEvent) ->
                         JavaFXUtilities.onDoubleClick(
                                 mouseEvent,
-                                doubleClick -> DocumentUtilities.openDocument(tableRow.getItem().document())
+                                doubleClick -> DocumentUtilities.openDocument(tableRow.getItem().documentScore().document())
                         )
         );
 
         Button searchButton = JavaFXCommonComponents.createGenericButton("Search", actionEvent -> {
             resultsTable.getItems().clear();
             List<DocumentScore> retrieved = this.controller.retrieveDocuments(queryField.getText());
-            resultsTable.getItems().addAll(retrieved);
+            List<DocumentRow> documentRows = new ArrayList<>();
+            for (DocumentScore documentScore : retrieved) {
+                documentRows.add(new DocumentRow(documentScore, this.getRelevancyJustification(queryField.getText(), documentScore.document().getContent())));
+            }
+            resultsTable.getItems().addAll(documentRows);
         });
 
         Node[] leftColumn = {queryField, searchButton, resultsTable};
@@ -105,5 +119,9 @@ public class RetrievalView implements View {
         Node[][] layout = {leftColumn, rightColumn};
 
         return JavaFXCommonComponents.createGenericColumnarLayout(layout, 10, 10);
+    }
+
+    private record DocumentRow(DocumentScore documentScore, String justification) {
+
     }
 }

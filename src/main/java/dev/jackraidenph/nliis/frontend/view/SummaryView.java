@@ -80,6 +80,12 @@ public class SummaryView implements View {
                 keySentences.setText(String.join("; ", summary.sentences()));
                 row.getChildren().add(keySentences);
 
+                TextArea ml = new TextArea();
+                ml.setWrapText(true);
+                ml.setEditable(false);
+                ml.setText(summary.mlSummary());
+                row.getChildren().add(ml);
+
                 Button open = new Button("Open Document");
                 open.setOnAction(actionEvent1 -> {
                     DocumentUtilities.openDocument(document);

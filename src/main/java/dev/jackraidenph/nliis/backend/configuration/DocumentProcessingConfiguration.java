@@ -6,6 +6,7 @@ import dev.jackraidenph.nliis.backend.service.DocumentStatisticsService;
 import dev.jackraidenph.nliis.backend.service.SentenceDetectorService;
 import dev.jackraidenph.nliis.backend.service.SummaryService;
 import dev.jackraidenph.nliis.backend.service.TranslationService;
+import lombok.RequiredArgsConstructor;
 import opennlp.tools.lemmatizer.LemmatizerModel;
 import opennlp.tools.postag.POSModel;
 import opennlp.tools.sentdetect.SentenceModel;
@@ -19,7 +20,10 @@ import org.springframework.context.annotation.Scope;
 import java.util.Locale;
 
 @Configuration
+@RequiredArgsConstructor
 public class DocumentProcessingConfiguration {
+
+    private final AIConfiguration aiConfiguration;
 
     @Bean
     @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
@@ -48,13 +52,13 @@ public class DocumentProcessingConfiguration {
     @Bean
     @DependsOn({"ruSentenceDetectorService", "documentStatisticsService"})
     public SummaryService ruSummaryService(SentenceDetectorService ruSentenceDetectorService, DocumentStatisticsService documentStatisticsService) {
-        return new SummaryService(documentStatisticsService, ruSentenceDetectorService);
+        return new SummaryService(documentStatisticsService, ruSentenceDetectorService, aiConfiguration.chatModel(aiConfiguration.ollamaApi()));
     }
 
     @Bean
     @DependsOn({"itSentenceDetectorService", "documentStatisticsService"})
     public SummaryService itSummaryService(SentenceDetectorService itSentenceDetectorService, DocumentStatisticsService documentStatisticsService) {
-        return new SummaryService(documentStatisticsService, itSentenceDetectorService);
+        return new SummaryService(documentStatisticsService, itSentenceDetectorService, aiConfiguration.chatModel(aiConfiguration.ollamaApi()));
     }
 
     @Bean
